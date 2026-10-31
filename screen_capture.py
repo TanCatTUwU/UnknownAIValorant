@@ -1,4 +1,3 @@
-"""Bounded, latest-frame capture from the actual primary display."""
 from __future__ import annotations
 
 import re
@@ -65,8 +64,8 @@ class ScreenCapture:
                     ticks = self.camera.latest_frame_ticks
                     if ticks is None or ticks == self._last_ticks:
                         return None
-                    # Keep caller-owned memory and a consistent frame timestamp: the
-                    # producer can advance between the timestamp read and frame copy.
+
+
                     frame = self.camera.grab()
                     if frame is None:
                         return None
@@ -87,7 +86,7 @@ class ScreenCapture:
             or (self.camera is not None and
                 (getattr(self.camera,'width',self.monitor['width']),getattr(self.camera,'height',self.monitor['height']))
                  != (self.monitor['width'],self.monitor['height']))):
-            raise RuntimeError("Display resolution changed. Restart the overlay at 1280x882 or 1280x720.")
+            raise RuntimeError("Display size changed. Restart the overlay.")
         return frame
 
     def _buffered_frame(self):

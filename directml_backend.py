@@ -1,10 +1,18 @@
 from __future__ import annotations
 import ast
 from dataclasses import dataclass
+from numbers import Integral
 from pathlib import Path
 import cv2
 import numpy as np
 import onnxruntime as ort
+
+_CAPTURE_SIZES = {
+    'focus': (640, 448),
+    'tight': (512, 384),
+    'fast': (384, 256),
+    'compact': (256, 192),
+}
 
 @dataclass(frozen=True)
 class Letterbox:
@@ -14,8 +22,9 @@ class Letterbox:
     top: int
 
 def validate_capture_size(width: int, height: int) -> None:
-    if (width, height) not in ((1280, 882), (1280, 720)):
-        raise ValueError(f'Primary display is {width}x{height}. Change its native resolution to 1280x882 (primary target) or 1280x720 before preparing frames.')
+    if any(isinstance(value, bool) or not isinstance(value, Integral) or value <= 0
+           for value in (width, height)):
+        raise ValueError('Display dimensions must be positive integers')
 
 def frame_delay(fps: int, elapsed: float) -> float:
     if not 1 <= fps <= 240:
@@ -29,28 +38,37 @@ def prepare_frame(frame: np.ndarray, size: int | tuple[int, int]) -> tuple[np.nd
     resized_width = max(1, round(width * scale))
     resized_height = max(1, round(height * scale))
     left, top = ((target_width - resized_width) // 2, (target_height - resized_height) // 2)
-    resized = cv2.resize(frame, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-    padded = np.full((target_height, target_width, 3), 114, dtype=np.uint8)
-    padded[top:top + resized_height, left:left + resized_width] = resized[:, :, :3]
-    tensor = cv2.dnn.blobFromImage(padded, 1 / 255.0, swapRB=True, crop=False)
+    resized = frame
+    if (resized_width, resized_height) != (width, height):
+        resized = cv2.resize(frame, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
+    image = resized[:, :, :3]
+    if (resized_width, resized_height) != (target_width, target_height) or image.dtype != np.uint8 or image.shape[2] != 3:
+        padded = np.full((target_height, target_width, 3), 114, dtype=np.uint8)
+        padded[top:top + resized_height, left:left + resized_width] = image
+        image = padded
+    elif resized.shape[2] == 4:
+        image = cv2.cvtColor(resized, cv2.COLOR_BGRA2BGR)
+    else:
+        image = np.ascontiguousarray(image)
+    tensor = cv2.dnn.blobFromImage(image, 1 / 255.0, swapRB=True, crop=False)
     return (tensor, Letterbox(resized_width, resized_height, left, top))
 
 def capture_region(width, height, view):
+    validate_capture_size(width, height)
     if view == 'full':
         return (0, 0, width, height)
-    sizes = {'focus': (640, 448), 'tight': (512, 384), 'fast': (384, 256), 'compact': (256, 192)}
-    if view not in sizes:
+    if view not in _CAPTURE_SIZES:
         raise ValueError(f'Unsupported detection view: {view}')
-    w, h = sizes[view]
-    if width < w or height < h:
-        raise ValueError(f'{view} view requires a frame of at least {w}x{h}')
-    left, top = ((width - w) // 2, (height - h) // 2)
-    return (left, top, w, h)
+    target_width, target_height = _CAPTURE_SIZES[view]
+    crop_width = min(width, target_width)
+    crop_height = min(height, target_height)
+    return ((width - crop_width) // 2, (height - crop_height) // 2,
+            crop_width, crop_height)
 
 def detection_view(frame, view):
     height, width = frame.shape[:2]
     region = capture_region(width, height, view)
-    if view == 'full':
+    if region == (0, 0, width, height):
         return (frame, region)
     left, top, w, h = region
     return (frame[top:top + h, left:left + w], region)

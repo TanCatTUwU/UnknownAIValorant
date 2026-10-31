@@ -1,4 +1,3 @@
-"""One-time CPU conversion of best.pt; no CUDA or TensorRT downloads."""
 from __future__ import annotations
 
 import argparse
@@ -7,7 +6,7 @@ from pathlib import Path
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='One-time CPU conversion of best.pt; no CUDA or TensorRT downloads.')
     parser.add_argument("--size", type=int, choices=(320, 416, 640), default=320)
     args = parser.parse_args()
     project = Path(__file__).resolve().parent

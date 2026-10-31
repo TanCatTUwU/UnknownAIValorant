@@ -1,8 +1,3 @@
-"""Short-lived screen-space tracks, compensated for background camera motion.
-
-No additional model pass or runtime dependency. Observations always take priority;
-only confirmed tracks bridge up to 100ms of missed detections.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -19,7 +14,7 @@ class CameraMotion:
 
 
 class CameraMotionEstimator:
-    """Sparse background flow on a 160px thumbnail; targets/HUD/weapon are masked."""
+
     def __init__(self):
         self._previous = None
         self._shape = None
@@ -68,7 +63,7 @@ class CameraMotionEstimator:
         mismatch = float(cv2.absdiff(warped,gray)[interior].mean()) if interior.any() else 255
         if mismatch > 40:
             return CameraMotion(scene_cut=change > 45)
-        # Convert thumbnail coordinates back to native screen pixels.
+
         ratios = np.array([width/sw,height/sh])
         affine[:,:2] = affine[:,:2] * ratios[:,None] / ratios[None,:]
         affine[:,2] *= ratios
@@ -87,10 +82,10 @@ class _Track:
 
 
 def _assign(costs):
-    """Solve independent gated groups; bound the cost of pathological crowds."""
+
     valid = costs < 1
-    # Most separated targets have just one possible partner. Resolve these in
-    # one step instead of constructing a Hungarian problem per isolated bot.
+
+
     single = valid & (valid.sum(axis=1)[:,None] == 1) & (valid.sum(axis=0)[None,:] == 1)
     rr,cc = np.where(single)
     result = list(zip(map(int,rr),map(int,cc)))
@@ -113,8 +108,8 @@ def _assign(costs):
         elif max(group.shape) <= 24:
             result.extend((rows[r],columns[c]) for r,c in _hungarian(group))
         else:
-            # A dense group this large is usually detection clutter. A sorted
-            # greedy assignment remains one-to-one without a CPU-time spike.
+
+
             rr,cc=np.where(group < 1)
             used_rows,used_columns=set(),set()
             for index in np.argsort(group[rr,cc],kind='stable'):
@@ -126,11 +121,7 @@ def _assign(costs):
 
 
 def _hungarian(costs):
-    """Minimum-cost one-to-one assignment with unmatched dummy columns.
 
-    Hungarian algorithm, bounded by the small number of visible tracks. Dummy
-    cost 1 means invalid or distant observations start their own tracks.
-    """
     n, m = costs.shape
     if not n or not m:
         return []
@@ -179,7 +170,7 @@ class MotionTracker:
 
     @property
     def active_tracks(self):
-        """Identity and latest native observation/prediction, normalized for diagnostics."""
+
         return tuple((t.identity,self._normalized(t.box,t)) for t in self._tracks)
 
     def _normalized(self, box, track):
@@ -188,8 +179,8 @@ class MotionTracker:
         return (*map(float,b),track.name,track.label)
 
     def update(self, detections, timestamp, frame_shape, *, motion=None, display_time=None, region=None):
-        # No external camera input means an explicit stationary-camera test/use.
-        # The live worker always supplies its estimator, including failures.
+
+
         motion = motion if motion is not None else CameraMotion(reliable=True)
         shape = tuple(frame_shape[:2])
         dt = 0 if self._timestamp is None else timestamp-self._timestamp
@@ -211,8 +202,8 @@ class MotionTracker:
             predicted.append(_warp_box(track.box,affine) + np.tile(track.velocity*dt,2))
         costs = np.full((len(predicted),len(observations)),1e6)
         if predicted and observations:
-            # One vectorized cost matrix avoids hundreds of tiny NumPy calls
-            # in crowded frames on this CPU.
+
+
             predicted_array = np.asarray(predicted)
             observed_array = np.asarray([o[0] for o in observations])
             sizes = predicted_array[:,2:] - predicted_array[:,:2]
@@ -249,7 +240,7 @@ class MotionTracker:
             if j not in used:
                 retained.append(_Track(self._next_id,box,name,label,np.zeros(2),timestamp))
                 self._next_id += 1
-        # Expire targets that leave the actual capture view, including focus view.
+
         left,top,rw,rh = region or (0,0,width,height)
         self._tracks = [t for t in retained if left <= (t.box[0]+t.box[2])/2 <= left+rw
                         and top <= (t.box[1]+t.box[3])/2 <= top+rh][:128]

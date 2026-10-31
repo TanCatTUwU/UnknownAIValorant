@@ -1,9 +1,3 @@
-"""Specialize the original 320px ONNX graph for smaller native center views.
-
-Convolution weights and numeric precision are preserved. Only static spatial
-shapes, detection anchors and their stride tensors change. ONNX is a build-time
-dependency; neither this builder nor the runtime imports PyTorch/Ultralytics.
-"""
 from __future__ import annotations
 
 import argparse
@@ -70,7 +64,7 @@ def build_model(source, destination, width, height, head_confidence):
 
 
 def main():
-    parser=argparse.ArgumentParser(description=__doc__)
+    parser=argparse.ArgumentParser(description='Specialize the original 320px ONNX graph for smaller native center views.')
     parser.add_argument('--source',type=Path,default=Path(__file__).with_name('best.onnx'))
     args=parser.parse_args()
     for name,(width,height,threshold) in PRESETS.items():

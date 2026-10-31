@@ -1,4 +1,3 @@
-"""Keep capture/tracking off the GUI's GIL; send only one latest marker packet."""
 from __future__ import annotations
 
 import multiprocessing
@@ -8,22 +7,22 @@ import traceback
 
 
 def put_latest(updates, packet):
-    """Replace an unread packet without growing the one-slot IPC queue."""
+
     while True:
         try:
             updates.put_nowait(packet)
             return
         except Full:
             try:
-                # A multiprocessing feeder may still be serializing the old
-                # item, so get_nowait alone cannot reliably replace it.
+
+
                 updates.get(timeout=.002)
             except Empty:
                 pass
 
 
 def engine_main(config, updates, errors, stop):
-    """Run the existing worker synchronously inside this spawned process."""
+
     sys.setswitchinterval(.001)
     from screen_overlay import DetectionWorker
 
@@ -53,14 +52,13 @@ def engine_main(config, updates, errors, stop):
         put_latest(updates, packet(None))
 
     def on_detections(detections):
-        # Materialize tiny plain-Python values. No captured image or NumPy
-        # buffer crosses the process boundary.
+
+
         current = [(float(x1), float(y1), float(x2), float(y2), str(name), str(label))
                    for x1, y1, x2, y2, name, label in detections]
         put_latest(updates, packet(current))
 
-    # The worker is constructed and run in this same child thread. Connections
-    # are direct and need no Qt application or event loop in the child.
+
     worker.status_ready.connect(on_status)
     worker.detections_ready.connect(on_detections)
     worker.failed.connect(failures.append)
@@ -70,8 +68,8 @@ def engine_main(config, updates, errors, stop):
 
 
 def _child_main(config, updates, errors, stop, target):
-    # Full update queues must never hold process shutdown waiting on a feeder.
-    # Failures use a synchronous, independent pipe and cannot be overwritten.
+
+
     updates.cancel_join_thread()
     try:
         target(config, updates, errors, stop)
@@ -88,7 +86,7 @@ def _child_main(config, updates, errors, stop, target):
 
 
 class ProcessEngine:
-    """Context-managed spawn child with bounded marker IPC and shutdown."""
+
     def __init__(self, config, *, target=engine_main):
         context = multiprocessing.get_context('spawn')
         self._updates = context.Queue(maxsize=1)
@@ -125,7 +123,7 @@ class ProcessEngine:
             self._close()
             raise
         self._started = True
-        # Only the child owns the sending endpoint, so EOF detects its exit.
+
         self._error_sender.close()
         return self
 
@@ -170,7 +168,7 @@ class ProcessEngine:
             current = self._updates.get(timeout=max(0., float(timeout)))
         except Empty:
             current = None
-        # Bounded even for a faulty producer that publishes in a tight loop.
+
         for _ in range(8):
             try:
                 current = self._updates.get_nowait()

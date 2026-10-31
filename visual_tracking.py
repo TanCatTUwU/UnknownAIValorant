@@ -35,14 +35,7 @@ class _Track:
 
 
 class PixelTracker:
-    """Track at most ``max_targets`` local patches for ``max_missing`` seconds.
 
-    Input and output boxes are normalized to the supplied cropped frame. A model
-    result must carry its source image/time when it predates the current image.
-    Missing/ambiguous visual correspondence hides a marker immediately. A good
-    visual correspondence bridges model misses for at most 100ms by default.
-    Call ``reset`` when capture region or model changes without changing shape.
-    """
     def __init__(self, max_missing=.1, max_targets=24, *, assistance=False, mouse_history=None):
         self.max_missing = max(0., min(float(max_missing), .25))
         self.max_targets = max(1, min(int(max_targets), 64))
@@ -112,13 +105,7 @@ class PixelTracker:
 
     @staticmethod
     def _patch(gray, box, head=False):
-        """Keep body interiors and complete small head silhouettes.
 
-        A tiny head's interior alone can be only 5px wide. Its outline carries
-        the correspondence when face pixels animate or neighboring heads look
-        alike. Larger textured heads and bodies use an interior to exclude
-        independently animated outlines, limbs and adjacent targets.
-        """
         height, width = gray.shape
         w, h = box[2]-box[0], box[3]-box[1]
         pw, ph = (min(20, math.ceil(w)), min(24, math.ceil(h))) if head and min(w, h) < 12 else (
@@ -132,8 +119,8 @@ class PixelTracker:
                 return patch, (float(x-box[0]), float(y-box[1])), None
         if not head:
             return None, None, None
-        # Tiny/flat heads need their edges, but static background must not
-        # dominate correspondence when a bot moves independently of the camera.
+
+
         pw, ph = min(20, max(8, math.ceil(w)+4)), min(24, max(8, math.ceil(h)+4))
         x, y = round(cx-pw/2), round(cy-ph/2)
         if x < 0 or y < 0 or x+pw > width or y+ph > height:
@@ -155,8 +142,8 @@ class PixelTracker:
             return True
         if adaptive and track.ambiguous:
             return False
-        # A fast pan gets one bounded wider search; ordinary 120Hz motion uses
-        # the small window. Failed/ambiguous pixels still never free-coast.
+
+
         fallback = max(64, radius) if adaptive else 24
         return bool(track.template is not None and (radius < fallback or any(hint))
                     and PixelTracker._search(gray, track, fallback, stationary=stationary))
@@ -182,20 +169,15 @@ class PixelTracker:
 
     @staticmethod
     def _verify_shift(gray, track, dx, dy, radius=24):
-        """Accept a head hint only when exact body pixels have a unique place.
 
-        A loose correlation threshold can accept a shifted smooth shirt. Exact
-        native pixel agreement is deliberately conservative; animation, model
-        jitter and independent body movement fall back to the normal search.
-        """
         if track.template is None:
             return False
         ph, pw = track.template.shape
         if track.last_patch is not None:
             lx, ly = track.last_position
             if cv2.norm(gray[ly:ly+ph, lx:lx+pw], track.last_patch, cv2.NORM_INF) == 0:
-                # A striped shirt may fit the moving head's hint even while
-                # its own measured pixels stopped. Preserve the stop first.
+
+
                 return False
         ex, ey = track.box[0]+track.offset[0], track.box[1]+track.offset[1]
         x, y = round(ex+dx), round(ey+dy)
@@ -281,8 +263,8 @@ class PixelTracker:
         ph, pw = template.shape
         if track.last_patch is not None and stationary:
             lx, ly = track.last_position
-            # Repeated capture pixels keep their exact last marker coordinates
-            # and need no search. This also saves work for stationary targets.
+
+
             if cv2.norm(gray[ly:ly+ph, lx:lx+pw], track.last_patch, cv2.NORM_INF) == 0:
                 track.displacement = 0.
                 return True
@@ -308,8 +290,8 @@ class PixelTracker:
                 return False
             quality, ambiguity = peak, .06
         patch = region[y:y+ph, x:x+pw]
-        # Correlation alone accepts severe contrast/lighting changes and some
-        # occlusions. Require the actual pixels to remain reasonably similar.
+
+
         if track.mask is None and cv2.norm(patch, template, cv2.NORM_L1)/(pw*ph) > 28:
             return False
         px, py = float(x), float(y)
@@ -323,8 +305,8 @@ class PixelTracker:
             denominator = a-2*b+c
             if denominator < -.001:
                 py += max(-.5, min(.5, .5*(a-c)/denominator))
-        # An equally plausible second place can be another bot. Hide instead
-        # of allowing two old markers to claim the same target's pixels.
+
+
         suppression = max(2, min(pw, ph)//5)
         scores[max(0, y-suppression):y+suppression+1,
                max(0, x-suppression):x+suppression+1] = -math.inf
@@ -345,9 +327,8 @@ class PixelTracker:
     def _observations(self, detections, source, timestamp, current, radius):
         height, width = current.shape
         proposals = []
-        # Model outputs are materialized and capped at300. Inspect those before
-        # budgeting patches, so Body-first output order cannot suppress Heads.
-        # Unbounded iterators keep a separate strict consumption limit.
+
+
         materialized = isinstance(detections, (Sequence, np.ndarray))
         budget = 300 if materialized else self.max_targets*4
         raw = list(islice(detections, budget))
@@ -383,9 +364,8 @@ class PixelTracker:
             body_verified = (radius and head is not None and id(head) in moved
                              and self._verify_shift(current, track, *moved[id(head)], radius=max(24, radius)))
             if radius and not body_verified:
-                # Nearest current markers cannot disambiguate the old source
-                # identity: a6px hint window may exclude an equally plausible
-                # neighboring head. Compare the entire bounded source window.
+
+
                 if not self._locate(current, track, radius, hint, self.assistance):
                     continue
             if not radius and template is not None:
@@ -457,9 +437,8 @@ class PixelTracker:
             costs = distance/gates[:, None]+.15*np.log(ratios)
             names = np.array([t.name.casefold() for t in self._tracks])
             other_names = np.array([t.name.casefold() for t in observations])
-            # Small heads often change detector size by more than2x while
-            # keeping the same center. Treat that as a correction instead of
-            # retaining the old box beside a new identity for another100ms.
+
+
             near_center = distance <= np.minimum(sizes.min(axis=1)[:, None],
                                                   other_sizes.min(axis=1)[None])*.5
             costs[(names[:, None] != other_names[None])
@@ -491,7 +470,7 @@ class PixelTracker:
         self._tracks = retained[:self.max_targets]
 
     def _unique_correspondence(self):
-        """One visible patch cannot carry two same-class marker identities."""
+
         if len(self._tracks) < 2:
             return
         chosen = []

@@ -1,4 +1,3 @@
-"""One DirectML runner with one replaceable waiting frame and one result slot."""
 from dataclasses import dataclass
 import threading
 import time
@@ -37,7 +36,7 @@ class LatestInference:
         self._thread.join()
 
     def submit(self,frame,timestamp):
-        """Caller-owned frame is shared read-only, never retained in a queue."""
+
         with self._condition:
             self._pending=(frame,timestamp)
             self._condition.notify_all()
@@ -77,6 +76,6 @@ class LatestInference:
                 self._elapsed+=elapsed
                 self._condition.notify_all()
                 if self._stop:return
-            # Native high-resolution sleep avoids timed Condition.wait rounding
-            # on Windows. Shutdown latency remains bounded by one frame period.
+
+
             time.sleep(max(0,1/self.fps-elapsed))

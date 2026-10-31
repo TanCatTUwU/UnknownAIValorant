@@ -1,4 +1,3 @@
-"""Benchmark the full preprocessing/inference/postprocessing path without capturing the screen."""
 from __future__ import annotations
 
 import argparse
@@ -9,16 +8,25 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 
-from directml_backend import DirectMLDetector, frame_delay
+from directml_backend import DirectMLDetector, frame_delay, validate_capture_size
+
+
+def parse_resolution(value):
+    try:
+        width, height = map(int, value.strip().lower().split('x'))
+        validate_capture_size(width, height)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError('Use positive WIDTHxHEIGHT dimensions') from error
+    return width, height
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description='Benchmark the full preprocessing/inference/postprocessing path without capturing the screen.')
     parser.add_argument("--device-id", type=int, default=0)
     parser.add_argument("--runs", type=int, default=60)
     parser.add_argument("--fps", type=int, choices=range(30, 241), default=120)
     parser.add_argument("--profile", action="store_true", help="Also verify GPU node placement")
-    parser.add_argument("--resolution", choices=("1280x882", "1280x720"), default="1280x882")
+    parser.add_argument("--resolution", type=parse_resolution, default=(1920, 1080), metavar='WIDTHxHEIGHT')
     args = parser.parse_args()
     if args.runs < 1:
         parser.error("--runs must be positive")
@@ -27,8 +35,8 @@ def main():
         project / "best.onnx", args.device_id,
         profile_prefix=project / "directml-profile" if args.profile else None,
     )
-    width, height = map(int, args.resolution.split("x"))
-    # Deterministic synthetic input at the requested native display resolution.
+    width, height = args.resolution
+
     frame = np.random.default_rng(42).integers(0, 256, (height, width, 3), dtype=np.uint8)
     for _ in range(5):
         detector.predict(frame)
@@ -64,7 +72,7 @@ def main():
         if not placements.get("DmlExecutionProvider") or placements.get("CPUExecutionProvider"):
             raise RuntimeError(f"GPU-only verification failed: {placements}")
     print(json.dumps(report, indent=2))
-    (project / f"benchmark-{args.resolution}.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    (project / f"benchmark-{width}x{height}.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
 
 if __name__ == "__main__":

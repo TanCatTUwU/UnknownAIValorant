@@ -1,9 +1,3 @@
-"""Blocking DirectML sessions through the installed ONNX Runtime 1.24.4 C API.
-
-The Python DML provider supplies its own spinning execution context. Creating
-the native provider directly lets ep.dml.enable_cpu_sync_spinning=0 take effect.
-No other provider or Python inference path is used by this module.
-"""
 from __future__ import annotations
 
 from collections.abc import Mapping
@@ -25,11 +19,7 @@ _PP = C.POINTER(_P)
 _I64P = C.POINTER(C.c_int64)
 _NAMES = C.POINTER(C.c_char_p)
 
-# Stable, append-only OrtApi table entries from Microsoft's MIT-licensed headers:
-# https://github.com/microsoft/onnxruntime/blob/v1.24.4/include/onnxruntime/core/session/onnxruntime_c_api.h
-# https://github.com/microsoft/onnxruntime/blob/v1.24.4/include/onnxruntime/core/providers/dml/dml_provider_factory.h
-# Values are pointer slots, not byte offsets. Only functions used below are bound;
-# no downloaded headers, exported Python internals, or external DLLs are needed.
+
 _FUNCTIONS = {
     'GetErrorMessage': (2, C.c_char_p, _P),
     'CreateEnv': (3, _P, _I, C.c_char_p, _PP),
@@ -123,12 +113,7 @@ def _load_api():
 
 
 class NativeDMLSession:
-    """Single-input/output static FP32 session with reusable CPU OrtValues.
 
-    Run synchronously copies each supplied feed into the same CPU input buffer.
-    ORT transfers fresh input on every native Run; the returned NumPy arrays are
-    independent copies, safe after another run or after closing this session.
-    """
     def __init__(self, model_path, device_id=0, profile_prefix=None):
         self._lock = threading.Lock()
         self._resources = ExitStack()
@@ -212,7 +197,7 @@ class NativeDMLSession:
         name = self._string('SessionGet' + kind + 'Name', self._session, 0, self._allocator)
         with ExitStack() as stack:
             info = self._handle('SessionGet' + kind + 'TypeInfo', 'ReleaseTypeInfo', self._session, 0, stack=stack)
-            tensor = _P()  # Borrowed from OrtTypeInfo; must not be separately released.
+            tensor = _P()
             self._api.check(self._api.CastTypeInfoToTensorInfo(info, C.byref(tensor)))
             if not tensor or self._scalar('GetTensorElementType', _I, tensor) != 1:
                 raise ValueError(f'Model {kind.lower()} must be a static float32 tensor')
@@ -259,7 +244,7 @@ class NativeDMLSession:
         return ['DmlExecutionProvider']
 
     def disable_fallback(self):
-        """CPU EP fallback is disabled before native session creation."""
+        pass
 
     def _check_open(self):
         if self._closed:

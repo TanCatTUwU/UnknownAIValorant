@@ -1,4 +1,3 @@
-# Local runtimes and Python caches
 .venv/
 venv/
 __pycache__/
@@ -6,14 +5,12 @@ __pycache__/
 runtime-env/
 export-env/
 
-# Model weights and compiled engines (provided locally)
 *.pt
 *.pth
 *.onnx
 *.engine
 *.safetensors
 
-# Tests and browser verification fixtures
 test/
 tests/
 __tests__/
@@ -31,7 +28,6 @@ coverage/
 playwright-report/
 test-results/
 
-# Documentation; dependency manifests remain part of the application
 docs/
 doc/
 *.md
@@ -47,7 +43,6 @@ doc/
 !requirements*.txt
 !CMakeLists.txt
 
-# Local diagnostics, previews and machine-specific launchers
 *.log
 *.tmp
 /overlay-preview.png
@@ -72,8 +67,6 @@ model-library/
 training-jobs/
 video-jobs/
 empty-scan-jobs/
-
-# Local jobs, connection state and generated artifacts
 /bundle-jobs/
 /deleted-items/
 *.json

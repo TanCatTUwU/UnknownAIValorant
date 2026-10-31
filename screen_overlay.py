@@ -111,8 +111,8 @@ class DetectionWorker(QThread):
 
     def _publish(self,current):
         with self._display_lock:self._display_update=(current, self.motion_metadata)
-        # Retained for external diagnostics; the GUI consumes only the latest
-        # state on its own timer, so old queued signals cannot build latency.
+
+
         self.detections_ready.emit(current)
 
     def run(self) -> None:
@@ -145,14 +145,13 @@ class DetectionWorker(QThread):
             return
         try:
             import mss
-            from directml_backend import capture_region, frame_delay, remap_detections, validate_capture_size
+            from directml_backend import capture_region, frame_delay, remap_detections
             from overlay_backend import create_detector, model_banner
             from latest_inference import LatestInference
             from visual_tracking import PixelTracker
             from screen_capture import ScreenCapture
             with mss.MSS() as info:
                 monitor = info.primary_monitor
-            validate_capture_size(monitor["width"], monitor["height"])
             model = create_detector(self.model_path, self.device_id, runtime=self.runtime)
             backend = model.backend_label
             print(model_banner(self.model_path, model), flush=True)
@@ -206,9 +205,8 @@ class DetectionWorker(QThread):
                         self.capture_timestamp=timestamp
                         inference.submit(frame,timestamp)
                     if last_frame is None or (frame is None and (model_ready or pending_result is None)):
-                        # Python3.12 sleep uses a high-resolution Windows timer.
-                        # Event.wait's millisecond timeout can round to a whole
-                        # desktop timer tick and halve the120Hz capture cadence.
+
+
                         time.sleep(.001)
                         continue
                     result,pending_result=pending_result,None
@@ -255,8 +253,8 @@ class DetectionWorker(QThread):
                         capture_total = tracking_total = age_total = 0.0
                         previous_completed,previous_processing=completed,processing
                         first_status = False
-                    # DXGI already paces its producer and skips repeated frames.
-                    # A second timed wait here reduces throughput and adds age.
+
+
                     if capture.name=='MSS':
                         time.sleep(frame_delay(self.fps,time.perf_counter()-frame_started))
         except Exception:
@@ -362,11 +360,7 @@ class DetectionOverlay(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
     def enable_capture_transparency(self) -> None:
-        """Use redirected color-key transparency on Windows so capture exclusion works.
 
-        Qt's per-pixel alpha window fails SetWindowDisplayAffinity with error 8
-        on this PC. The color-key window keeps GDI redirection and click-through.
-        """
         if QApplication.platformName() != "windows":
             return
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
@@ -505,7 +499,7 @@ class DetectionOverlay(QWidget):
 
         width = self.width()
         height = self.height()
-        # A visible heartbeat distinguishes an idle detector from a stopped app.
+
         if self._show_status:
             painter.fillRect(QRect(12, 12, min(660, width - 24), 54), QColor(12, 18, 24, 220))
             painter.setPen(QColor(80, 240, 190))
@@ -516,8 +510,8 @@ class DetectionOverlay(QWidget):
             painter.drawRect(test_rect)
             painter.drawText(test_rect.adjusted(4, 4, -4, -4), Qt.AlignmentFlag.AlignTop,
                              "OVERLAY DISPLAY TEST")
-        # Color-key transparency removes one exact RGB value, not edge alpha.
-        # Antialiasing onto that opaque key would leave a near-black fringe.
+
+
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, not self._color_key_enabled)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing, not self._color_key_enabled)
         self._sync_marker_font()
@@ -634,16 +628,14 @@ def main(argv=None) -> int:
         print(f'Could not select the overlay model: {error}',file=sys.stderr)
         return 1
 
-    # Initialize Qt's DPI context before MSS configures capture awareness.
+
     app = QApplication([sys.argv[0]])
     app.setQuitOnLastWindowClosed(False)
 
     import mss
-    from directml_backend import validate_capture_size
     try:
         with mss.MSS() as capture:
             primary = capture.primary_monitor
-            validate_capture_size(primary["width"], primary["height"])
     except Exception as error:
         print(str(error), file=sys.stderr)
         return 1
@@ -663,12 +655,14 @@ def main(argv=None) -> int:
 
     from directml_backend import capture_region
     region=capture_region(primary['width'],primary['height'],args.view)
-    x,y,w,h=region
-    # Leave room for confidence labels above/below boxes at the capture boundary.
+
     geometry=overlay_geometry(screen.geometry(),(primary['height'],primary['width']),region)
     overlay = DetectionOverlay(geometry.adjusted(-16,-16,16,16).intersected(screen.geometry()))
     overlay._show_status=False
-    status_overlay = DetectionOverlay(QRect(screen.geometry().x(),screen.geometry().y(),700,80)) if args.show_debug_info else None
+    screen_rect = screen.geometry()
+    status_geometry = QRect(screen_rect.x(), screen_rect.y(),
+                            min(700, screen_rect.width()), min(80, screen_rect.height()))
+    status_overlay = DetectionOverlay(status_geometry) if args.show_debug_info else None
     try:
         overlay.enable_capture_transparency()
         if status_overlay is not None:
